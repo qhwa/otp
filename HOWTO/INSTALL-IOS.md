@@ -24,12 +24,18 @@ In order to inform the build system that it should generate the static linkable 
          --without-ssl
 
 
-To build with OpenSSL statically linked, run `configure` like this (note that 1.1.1k works, but needs a manual patch in ios cross build config to include engines):
+To build with OpenSSL statically linked, run `configure` like this:
 
     $ ./otp_build configure \
          --xcomp-conf=./xcomp/erl-xcomp-arm64-ios.conf  \
-         --with-ssl=/path/to/libcrypto.a \
+         --with-ssl=/path/to/ssl/prefix \
          --disable-dynamic-ssl-lib
+
+Ensure that your OpenSSL is also cross-compiled for the same architecture. For example, if you choose OpenSSL 1.1.1w and your target architecture is `arm64-ios`, you may configure it with:
+
+    $ ./Configure ios64-xcrun --prefix=/path/to/ssl/prefix
+
+The [configuration](https://github.com/openssl/openssl/blob/master/Configurations/15-ios.conf) in the OpenSSL's repository can be a reference for the name mapping.
 
 
 ### Compile Erlang/OTP ###
