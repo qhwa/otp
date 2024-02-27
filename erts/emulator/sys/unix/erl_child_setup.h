@@ -64,7 +64,10 @@ typedef struct ErtsSysForkerProto_ {
             int fds[3];
         } start;
         struct {
-            pid_t os_pid;
+            union {
+                pid_t os_pid;
+                pthread_t os_pthread;
+            };
             int error_number;
         } go;
         struct {
@@ -73,5 +76,7 @@ typedef struct ErtsSysForkerProto_ {
         } sigchld;
     } u;
 } ErtsSysForkerProto;
+
+extern void *erl_child_setup_thread(void *arg);
 
 #endif /* #ifndef _ERL_UNIX_FORKER_H */
