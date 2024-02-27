@@ -24,7 +24,6 @@
 
 ERL_NIF_TERM hash_equals_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-#ifdef HAVE_OPENSSL_CRYPTO_MEMCMP
     ErlNifBinary s1, s2;
 
     ASSERT(argc == 2);
@@ -45,7 +44,4 @@ ERL_NIF_TERM hash_equals_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
  bad_arg:
  err:
     return enif_make_badarg(env);
-#else
-    return EXCP_NOTSUP(env, "Unsupported CRYPTO_memcmp");
-#endif
 }

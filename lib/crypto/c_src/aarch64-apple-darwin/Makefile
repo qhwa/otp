@@ -1,0 +1,291 @@
+#
+# %CopyrightBegin%
+#
+# Copyright Ericsson AB 1999-2023. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# %CopyrightEnd%
+#
+include $(ERL_TOP)/make/target.mk
+include $(ERL_TOP)/make/$(TARGET)/otp.mk
+
+# ----------------------------------------------------
+# Application version
+# ----------------------------------------------------
+include ../vsn.mk
+VSN=$(CRYPTO_VSN)
+
+# ----------------------------------------------------
+# The following variables differ between systems.
+# Set by configure.
+# ----------------------------------------------------
+CC = xcrun -sdk macosx cc -arch arm64
+LD = xcrun -sdk macosx ld -arch arm64
+SHELL = /bin/sh
+LIBS = 
+LDFLAGS += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.2.sdk/usr/lib/ -r -v
+CFLAGS = -Werror=undef -Werror=implicit -Werror=return-type  -Wdeclaration-after-statement -Wall -Wstrict-prototypes -Wmissing-prototypes  -D_THREAD_SAFE -D_REENTRANT -DPOSIX_THREADS -fno-strict-aliasing -fno-common -g -O2 -fPIC -fno-common -DHAVE_OPENSSL_CRYPTO_MEMCMP 
+
+# From configure
+SSL_LIBDIR = /opt/openssl-darwin64-arm64/lib
+SSL_INCLUDE = -I/opt/openssl-darwin64-arm64/include
+SSL_CRYPTO_LIBNAME = crypto
+SSL_SSL_LIBNAME = ssl
+CRYPTO_NO_DEPRECATE_WARN = -Wno-deprecated-declarations
+
+INCLUDES = $(SSL_INCLUDE) -I/Users/qhwa/tools/otp/erts/emulator/beam -I/Users/qhwa/tools/otp/erts/include -I/Users/qhwa/tools/otp/erts/include/aarch64-apple-darwin -I/Users/qhwa/tools/otp/erts/include/internal -I/Users/qhwa/tools/otp/erts/include/internal/aarch64-apple-darwin -I/Users/qhwa/tools/otp/erts/emulator/sys/unix -I/Users/qhwa/tools/otp/erts/emulator/sys/common
+SSL_EXTRA_LIBS=
+
+ifeq ($(TYPE),debug)
+TYPEMARKER = .debug
+TYPE_FLAGS = $(subst -O3,,$(subst -O2,,$(CFLAGS))) -DDEBUG
+else
+ifeq ($(TYPE),valgrind)
+TYPEMARKER = .valgrind
+TYPE_FLAGS = $(subst -O3,,$(subst -O2,,$(CFLAGS))) -DVALGRIND
+else
+ifeq ($(TYPE),gprof)
+TYPEMARKER = .gprof
+TYPE_EXTRA_CFLAGS = -DGPROF -pg
+TYPE_FLAGS = $(CFLAGS) $(TYPE_EXTRA_CFLAGS)
+else
+ifeq ($(TYPE),asan)
+TYPEMARKER = .asan
+TYPE_FLAGS = $(CFLAGS) -fsanitize=address -fsanitize-recover=address -fno-omit-frame-pointer -DADDRESS_SANITIZER
+LDFLAGS += -fsanitize=address
+else
+TYPEMARKER =
+TYPE_FLAGS = $(CFLAGS)
+endif
+endif
+endif
+endif
+
+# ----------------------------------------------------
+# Release directory specification
+# ----------------------------------------------------
+RELSYSDIR = $(RELEASE_PATH)/lib/crypto-$(VSN)
+
+# ----------------------------------------------------
+# Misc Macros
+# ----------------------------------------------------
+
+PRIVDIR = ../priv
+OBJDIR = $(PRIVDIR)/obj/$(TARGET)
+LIBDIR = $(PRIVDIR)/lib/$(TARGET)
+
+CRYPTO_OBJS = $(OBJDIR)/crypto$(TYPEMARKER).o \
+	$(OBJDIR)/aead$(TYPEMARKER).o \
+	$(OBJDIR)/aes$(TYPEMARKER).o \
+	$(OBJDIR)/algorithms$(TYPEMARKER).o \
+	$(OBJDIR)/api_ng$(TYPEMARKER).o \
+	$(OBJDIR)/atoms$(TYPEMARKER).o \
+	$(OBJDIR)/bn$(TYPEMARKER).o \
+	$(OBJDIR)/cipher$(TYPEMARKER).o \
+	$(OBJDIR)/cmac$(TYPEMARKER).o \
+	$(OBJDIR)/common$(TYPEMARKER).o \
+	$(OBJDIR)/dh$(TYPEMARKER).o \
+	$(OBJDIR)/digest$(TYPEMARKER).o \
+	$(OBJDIR)/dss$(TYPEMARKER).o \
+	$(OBJDIR)/ec$(TYPEMARKER).o \
+	$(OBJDIR)/ecdh$(TYPEMARKER).o \
+	$(OBJDIR)/eddsa$(TYPEMARKER).o \
+	$(OBJDIR)/engine$(TYPEMARKER).o \
+	$(OBJDIR)/evp$(TYPEMARKER).o \
+	$(OBJDIR)/fips$(TYPEMARKER).o \
+	$(OBJDIR)/hash$(TYPEMARKER).o \
+	$(OBJDIR)/hmac$(TYPEMARKER).o \
+	$(OBJDIR)/info$(TYPEMARKER).o \
+	$(OBJDIR)/mac$(TYPEMARKER).o \
+	$(OBJDIR)/math$(TYPEMARKER).o \
+	$(OBJDIR)/pkey$(TYPEMARKER).o \
+	$(OBJDIR)/rand$(TYPEMARKER).o \
+	$(OBJDIR)/rsa$(TYPEMARKER).o \
+	$(OBJDIR)/srp$(TYPEMARKER).o \
+	$(OBJDIR)/hash_equals$(TYPEMARKER).o \
+	$(OBJDIR)/pbkdf2_hmac$(TYPEMARKER).o
+
+CALLBACK_OBJS = $(OBJDIR)/crypto_callback$(TYPEMARKER).o
+CRYPTO_STATIC_OBJS = $(patsubst $(OBJDIR)/%$(TYPEMARKER).o,$(OBJDIR)/%_static$(TYPEMARKER).o,$(CRYPTO_OBJS) $(CALLBACK_OBJS))
+
+NIF_ARCHIVE = $(LIBDIR)/crypto$(TYPEMARKER).a
+
+NIF_LIB = $(LIBDIR)/crypto$(TYPEMARKER).so
+CALLBACK_LIB = $(LIBDIR)/crypto_callback$(TYPEMARKER).so
+
+DISABLE_OTP_TEST_ENGINE = no
+ifeq ($(DISABLE_OTP_TEST_ENGINE),yes)
+TEST_ENGINE_LIB =
+TEST_ENGINE_OBJS =
+else
+TEST_ENGINE_LIB = $(LIBDIR)/otp_test_engine$(TYPEMARKER).so
+TEST_ENGINE_OBJS = $(OBJDIR)/otp_test_engine$(TYPEMARKER).o
+endif
+
+DYNAMIC_CRYPTO_LIB=no
+# Weird that we compile as if dynamically linking when statically
+# linking on windows...
+ifeq ($(DYNAMIC_CRYPTO_LIB),yes)
+DYNAMIC_OR_WIN_CRYPTO_LIB=yes
+else
+ifeq ($(TARGET),win32)
+DYNAMIC_OR_WIN_CRYPTO_LIB=yes
+else
+DYNAMIC_OR_WIN_CRYPTO_LIB=no
+endif
+endif
+
+ifeq ($(DYNAMIC_OR_WIN_CRYPTO_LIB),yes)
+SSL_DED_LD_RUNTIME_LIBRARY_PATH = 
+CRYPTO_LINK_LIB=$(SSL_DED_LD_RUNTIME_LIBRARY_PATH) -L$(SSL_LIBDIR) -l$(SSL_CRYPTO_LIBNAME)
+EXTRA_FLAGS = -DHAVE_DYNAMIC_CRYPTO_LIB
+else
+SSL_DED_LD_RUNTIME_LIBRARY_PATH=
+CRYPTO_LINK_LIB=$(SSL_LIBDIR)/lib$(SSL_CRYPTO_LIBNAME).a
+EXTRA_FLAGS =
+CRYPTO_OBJS := $(CRYPTO_OBJS) $(CALLBACK_OBJS)
+CALLBACK_OBJS =
+CALLBACK_LIB =
+endif
+
+ifeq ($(USING_VC),yes)
+AR_OUT=-out:
+AR_FLAGS=
+else
+AR_OUT=
+ifeq ($(V),0)
+AR_FLAGS=rc
+else
+AR_FLAGS=rcv
+endif
+endif
+
+ifndef RANLIB
+RANLIB=true
+endif
+
+CONFIGURE_ARGS = -DDISABLE_EVP_DH=0 -DDISABLE_EVP_HMAC=0
+
+ALL_CFLAGS = $(TYPE_FLAGS) $(EXTRA_FLAGS) $(CONFIGURE_ARGS) $(INCLUDES)
+ALL_STATIC_CFLAGS = -Werror=undef -Werror=implicit -Werror=return-type    -D_THREAD_SAFE -D_REENTRANT -DPOSIX_THREADS -fno-strict-aliasing -fno-common -g -O2   -fno-common -DSTATIC_ERLANG_NIF -DSTATIC_ERLANG_DRIVER $(TYPE_EXTRA_CFLAGS) $(CONFIGURE_ARGS) $(INCLUDES)
+
+# ----------------------------------------------------
+# Targets
+# ----------------------------------------------------
+
+_create_dirs := $(shell mkdir -p $(OBJDIR) $(LIBDIR))
+
+debug opt valgrind asan: $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB)
+
+static_lib: $(NIF_ARCHIVE)
+
+ifeq ($(DISABLE_OTP_TEST_ENGINE),yes)
+else
+$(OBJDIR)/otp_test_engine$(TYPEMARKER).o: otp_test_engine.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(filter-out -Wmissing-prototypes,$(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN)) $<
+
+$(LIBDIR)/otp_test_engine$(TYPEMARKER).so: $(TEST_ENGINE_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(CRYPTO_LINK_LIB) $(SSL_EXTRA_LIBS)
+
+$(LIBDIR)/otp_test_engine$(TYPEMARKER).dll: $(TEST_ENGINE_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@  $(SSL_DED_LD_RUNTIME_LIBRARY_PATH) -L$(SSL_LIBDIR) $(TEST_ENGINE_OBJS) -l$(SSL_CRYPTO_LIBNAME) -l$(SSL_SSL_LIBNAME) $(SSL_EXTRA_LIBS)
+endif
+
+# $(OBJDIR)/ec$(TYPEMARKER).o: ec.c
+# 	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+# 	$(V_CC) -c -o $@ $(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN) $<
+
+# ---- Hard-coded removal of deprecated warning for ENGINE function calls
+$(OBJDIR)/engine$(TYPEMARKER).o: engine.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN) $<
+
+$(OBJDIR)/pkey$(TYPEMARKER).o: pkey.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN) $<
+
+# ---- End of Hard-coded removal of deprecated warning for ENGINE function calls
+
+$(OBJDIR)/%$(TYPEMARKER).o: %.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -MMD -c -o $@ $(ALL_CFLAGS) $<
+
+$(LIBDIR)/crypto$(TYPEMARKER).so: $(CRYPTO_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(CRYPTO_LINK_LIB) $(SSL_EXTRA_LIBS)
+
+$(OBJDIR)/%_static$(TYPEMARKER).o: %.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_STATIC_CFLAGS) $<
+
+$(LIBDIR)/crypto$(TYPEMARKER).a: $(CRYPTO_STATIC_OBJS)
+	$(V_AR) $(AR_FLAGS) $(AR_OUT)$@ $(CRYPTO_STATIC_OBJS)
+	$(V_RANLIB) $@
+
+$(LIBDIR)/crypto$(TYPEMARKER).dll: $(CRYPTO_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@  $(SSL_DED_LD_RUNTIME_LIBRARY_PATH) -L$(SSL_LIBDIR) $(CRYPTO_OBJS) -l$(SSL_CRYPTO_LIBNAME) -l$(SSL_SSL_LIBNAME) $(SSL_EXTRA_LIBS)
+
+ifeq ($(DYNAMIC_OR_WIN_CRYPTO_LIB),yes)
+$(LIBDIR)/crypto_callback$(TYPEMARKER).so: $(CALLBACK_OBJS)
+	$(INSTALL_DIR) $(LIBDIR)
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(LIBDIR)/crypto_callback$(TYPEMARKER).dll: $(CALLBACK_OBJS)
+	$(INSTALL_DIR) $(LIBDIR)
+	$(LD) $(LDFLAGS) -o $@ $(CALLBACK_OBJS)
+endif
+
+
+CLEAN_OBJS_RAW = $(CRYPTO_OBJS) $(CALLBACK_OBJS) $(CRYPTO_STATIC_OBJS) $(TEST_ENGINE_OBJS)
+CLEAN_OBJS_O = $(patsubst %.debug.o,%.o,$(CLEAN_OBJS_RAW:.valgrind.o=.o))
+
+CLEAN_LIBS_RAW = $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB)
+CLEAN_LIBS_SO = $(patsubst %.debug.so,%.so,$(CLEAN_LIBS_RAW:.valgrind.so=.so))
+
+clean_dynamic_libs:
+	rm -f $(CLEAN_LIBS_SO)
+	rm -f $(foreach T,.valgrind.so .debug.so .asan.so,$(CLEAN_LIBS_SO:.so=$T))
+
+clean_objs:
+	rm -f $(CLEAN_OBJS_O)
+	rm -f $(foreach T,.valgrind.o .debug.o .asan.o,$(CLEAN_OBJS_O:.o=$T))
+
+clean: clean_objs clean_dynamic_libs
+	rm -f core *~
+
+docs:
+
+# ----------------------------------------------------
+# Release Target
+# ----------------------------------------------------
+include $(ERL_TOP)/make/otp_release_targets.mk
+
+release_spec: opt
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_PROGRAM) $(NIF_LIB) "$(RELSYSDIR)/priv/lib"
+ifeq ($(DYNAMIC_OR_WIN_CRYPTO_LIB),yes)
+	$(INSTALL_PROGRAM) $(CALLBACK_LIB) "$(RELSYSDIR)/priv/lib"
+endif
+ifeq ($(DISABLE_OTP_TEST_ENGINE),yes)
+else
+	$(INSTALL_PROGRAM) $(TEST_ENGINE_LIB) "$(RELSYSDIR)/priv/lib"
+endif
+
+release_docs_spec:
+
+-include $(CRYPTO_OBJS:%.o=%.d)
